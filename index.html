@@ -723,9 +723,11 @@ async function convertDoc(file, fmt) {
       // Strip RTF control words and groups
       plain = text
         .replace(/\{\\[^}]*\}/g, '')       // remove groups like {onttbl ...}
-        .replace(/\\[a-z]+\-?[0-9]* ?/g, '') // remove control words like tf1 nsi
+        .replace(/\\[a-z]+\-?[0-9]* ?/g, '') // remove control words like 
+tf1 nsi
         .replace(/[\\{}]/g, '')              // remove remaining braces/backslashes
-        .replace(/?
+        .replace(/
+?
 +/g, '
 ').trim();
     } else {
