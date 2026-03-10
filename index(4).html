@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Morphix — File Converter</title>
+<meta name="description" content="Convert video, audio, images and documents right in your browser. No uploads, no sign-up, 100% private.">
+<meta property="og:title" content="Morphix — File Converter">
+<meta property="og:description" content="Convert anything right in your browser. No uploads, no sign-up.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#e8ff47">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.11.6/ffmpeg.min.js"></script>
+<style>
+/* ── Variables ── */
+:root {
+  --bg:      #0a0a0f;
+  --surface: #12121a;
+  --border:  #1e1e2e;
+  --accent:  #e8ff47;
+  --red:     #ff4757;
+  --text:    #e8e8f0;
+  --muted:   #555570;
+  --green:   #47ffb8;
+  --pro:     #f0b429;
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Background grid ── */
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(232,255,71,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232,255,71,0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* ── Header ── */
+header {
+  padding: 1.1rem 2.5rem;
+  display: flex; align-items: center; gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(10,10,15,0.93);
+  backdrop-filter: blur(14px);
+}
+.logo { font-size: 1.35rem; font-weight: 800; letter-spacing: -0.03em; color: var(--accent); }
+.logo span { color: var(--text); }
+
+.pro-btn {
+  margin-left: auto;
+  background: #1a1400;
+  border: 1px solid var(--pro);
+  color: var(--pro);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 0.07em;
+  padding: 0.3rem 0.8rem;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.pro-btn:hover               { background: var(--pro); color: var(--bg); }
+.pro-btn.is-active           { background: var(--pro); color: var(--bg); cursor: default; pointer-events: none; }
+
+/* ── Layout ── */
+.wrap { max-width: 1000px; margin: 0 auto; padding: 3rem 2rem 4rem; }
+
+h1 {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 800; line-height: 1.05;
+  letter-spacing: -0.04em; margin-bottom: 0.4rem;
+}
+h1 em { font-style: normal; color: var(--accent); }
+.sub {
+  color: var(--muted);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.78rem; margin-bottom: 2.5rem;
+}
+
+/* ── Pro banner ── */
+.pro-bar {
+  display: none; align-items: center; gap: 0.5rem;
+  background: rgba(240,180,41,0.07);
+  border: 1px solid rgba(240,180,41,0.25);
+  border-radius: 4px; padding: 0.6rem 1.1rem; margin-bottom: 1.5rem;
+  font-family: 'Space Mono', monospace; font-size: 0.7rem; color: var(--pro);
+}
+.pro-bar.is-visible { display: flex; }
+
+/* ── Tabs ── */
+.tabs {
+  display: flex; gap: 0.4rem; flex-wrap: wrap;
+  margin-bottom: 2rem; padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.tab-divider { width: 1px; background: var(--border); height: 1.4rem; margin: 0 0.2rem; flex-shrink: 0; }
+.tab {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.4rem 0.9rem; border-radius: 2px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border);
+  font-family: 'Space Mono', monospace; font-size: 0.67rem; color: var(--muted);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  white-space: nowrap; user-select: none;
+}
+.tab:hover    { border-color: var(--muted); color: var(--text); }
+.tab.is-active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 700; }
+
+/* ── Panels ── */
+.panel { display: none; }
+.panel.is-visible { display: block; animation: fadeUp 0.18s ease; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ── Dropzone ── */
+.dropzone {
+  border: 2px dashed var(--border); border-radius: 4px;
+  padding: 2.5rem 2rem; text-align: center; cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  position: relative; overflow: hidden; margin-bottom: 1.5rem;
+}
+.dropzone::before {
+  content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 120%, rgba(232,255,71,0.05) 0%, transparent 70%);
+}
+.dropzone:hover::before, .dropzone.is-over::before { opacity: 1; }
+.dropzone:hover, .dropzone.is-over { border-color: var(--accent); border-style: solid; }
+.dz-icon  { font-size: 2.2rem; margin-bottom: 0.7rem; display: block; }
+.dz-title { font-size: 1rem; font-weight: 700; margin-bottom: 0.3rem; }
+.dz-hint  { font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--muted); margin-bottom: 0.5rem; }
+.dz-sub   { font-family: 'Space Mono', monospace; font-size: 0.6rem; color: var(--border); margin-top: 0.8rem; letter-spacing: 0.05em; transition: color 0.2s; }
+.dropzone:hover .dz-sub { color: var(--muted); }
+
+/* ── File list ── */
+.list-label {
+  font-family: 'Space Mono', monospace; font-size: 0.65rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.8rem;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.list-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.file-row {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+  padding: 0.8rem 1rem; margin-bottom: 0.4rem;
+  display: grid; grid-template-columns: auto 1fr auto auto;
+  align-items: center; gap: 0.9rem;
+  animation: fadeUp 0.18s ease;
+}
+.file-row.is-toolarge { border-color: rgba(255,71,87,0.4); }
+
+.badge {
+  font-family: 'Space Mono', monospace; font-size: 0.57rem; font-weight: 700;
+  padding: 0.18rem 0.4rem; border-radius: 2px; text-transform: uppercase; flex-shrink: 0;
+}
+.badge-video { background: #2a1a3a; color: #b847ff; }
+.badge-audio { background: #1a3a2a; color: #47ffb8; }
+.badge-image { background: #1a2a4a; color: #47b8ff; }
+.badge-doc   { background: #2a1a1a; color: #ff8c47; }
+
+.file-info { min-width: 0; }
+.file-name { font-size: 0.85rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-size { font-family: 'Space Mono', monospace; font-size: 0.63rem; color: var(--muted); margin-top: 0.1rem; }
+.file-size-warn { color: var(--red); }
+.file-size-gopro { color: var(--pro); text-decoration: none; cursor: pointer; }
+.file-size-gopro:hover { text-decoration: underline; }
+
+.fmt-select {
+  appearance: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Space Mono', monospace; font-size: 0.68rem;
+  padding: 0.3rem 1.6rem 0.3rem 0.6rem;
+  border-radius: 2px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23555570' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.45rem center;
+  transition: border-color 0.15s;
+}
+.fmt-select:focus { outline: none; border-color: var(--accent); }
+
+.del-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 0 0.2rem; transition: color 0.15s; flex-shrink: 0; }
+.del-btn:hover { color: var(--red); }
+
+/* ── Actions ── */
+.actions { margin-top: 1.4rem; display: none; gap: 0.7rem; flex-wrap: wrap; }
+.actions.is-visible { display: flex; }
+
+.btn {
+  padding: 0.68rem 1.5rem; border: none; border-radius: 2px;
+  font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.85rem;
+  cursor: pointer; transition: background 0.15s, color 0.15s, transform 0.15s;
+}
+.btn-go  { background: var(--accent); color: var(--bg); }
+.btn-go:hover:not(:disabled) { background: #fff; transform: translateY(-1px); }
+.btn-go:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+.btn-clr { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-clr:hover { border-color: var(--muted); color: var(--text); }
+
+/* ── Progress ── */
+.progress { margin-top: 1.4rem; display: none; }
+.progress.is-visible { display: block; }
+.progress-top {
+  font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--muted);
+  margin-bottom: 0.4rem; display: flex; justify-content: space-between;
+}
+.progress-bar  { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+
+/* ── Results ── */
+.results { margin-top: 1.8rem; display: none; }
+.results.is-visible { display: block; }
+
+.dl-all-row { display: flex; justify-content: flex-end; margin-bottom: 0.5rem; }
+
+.res-row {
+  background: var(--surface); border-radius: 4px;
+  padding: 0.7rem 1rem; margin-bottom: 0.4rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  animation: fadeUp 0.18s ease;
+}
+.res-row-ok    { border: 1px solid var(--green); }
+.res-row-error { border: 1px solid var(--red); }
+.res-name-ok    { font-size: 0.85rem; font-weight: 700; color: var(--green); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.res-name-error { font-size: 0.85rem; font-weight: 700; color: var(--red); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.res-error-msg  { font-family: 'Space Mono', monospace; font-size: 0.63rem; color: var(--muted); flex-shrink: 0; }
+
+.dl-btn {
+  flex-shrink: 0;
+  padding: 0.28rem 0.7rem;
+  background: var(--green); color: var(--bg);
+  border: none; border-radius: 2px;
+  font-family: 'Space Mono', monospace; font-size: 0.63rem; font-weight: 700;
+  cursor: pointer; text-decoration: none;
+  transition: opacity 0.15s;
+}
+.dl-btn:hover { opacity: 0.8; }
+
+/* ── Unit converter ── */
+.unit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+.unit-card { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1.1rem; }
+.unit-title { font-weight: 800; font-size: 0.9rem; margin-bottom: 0.9rem; }
+.unit-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto 1fr auto;
+  gap: 0.4rem; align-items: center; margin-bottom: 0.5rem;
+}
+.unit-input {
+  min-width: 0; width: 100%;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  font-family: 'Space Mono', monospace; font-size: 0.78rem;
+  padding: 0.38rem 0.55rem; border-radius: 2px;
+  transition: border-color 0.15s;
+}
+.unit-input:focus { outline: none; border-color: var(--accent); }
+.unit-lbl { font-family: 'Space Mono', monospace; font-size: 0.58rem; color: var(--muted); white-space: nowrap; }
+.unit-arr { color: var(--muted); font-size: 0.75rem; }
+
+/* ── Footer ── */
+.foot { margin-top: 3rem; font-family: 'Space Mono', monospace; font-size: 0.65rem; color: var(--muted); }
+.foot span { color: var(--accent); }
+
+/* ── Pro Modal ── */
+.overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.82); backdrop-filter: blur(10px);
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.overlay.is-open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface); border: 1px solid rgba(240,180,41,0.3);
+  border-radius: 6px; width: 100%; max-width: 480px; overflow: hidden;
+  transform: translateY(14px) scale(0.97); transition: transform 0.2s ease;
+  box-shadow: 0 0 60px rgba(240,180,41,0.07);
+}
+.overlay.is-open .modal { transform: none; }
+
+.modal-head {
+  padding: 1.3rem 1.6rem 1rem; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-between;
+}
+.modal-title { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.03em; }
+.modal-title em { font-style: normal; color: var(--pro); }
+.modal-tag { font-family: 'Space Mono', monospace; font-size: 0.65rem; color: var(--muted); margin-top: 0.2rem; }
+.modal-close { background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; transition: color 0.15s; padding: 0; }
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 1.3rem 1.6rem; }
+.modal-foot { padding: 0.7rem 1.6rem 1rem; border-top: 1px solid var(--border); text-align: center; font-family: 'Space Mono', monospace; font-size: 0.58rem; color: var(--muted); }
+
+.feats { list-style: none; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 1.3rem; }
+.feats li { display: flex; align-items: center; gap: 0.7rem; padding: 0.52rem 0.9rem; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
+.feats li:last-child { border-bottom: none; }
+.feat-icon { font-size: 0.88rem; flex-shrink: 0; }
+.feat-label { flex: 1; }
+.tag-free { font-family: 'Space Mono', monospace; font-size: 0.55rem; padding: 0.1rem 0.35rem; background: var(--border); color: var(--muted); border-radius: 2px; }
+.tag-pro  { font-family: 'Space Mono', monospace; font-size: 0.55rem; padding: 0.1rem 0.35rem; background: rgba(240,180,41,0.12); color: var(--pro); border-radius: 2px; }
+
+.plans { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+.plan {
+  border: 1.5px solid var(--border); border-radius: 4px; padding: 1rem;
+  cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  position: relative; user-select: none;
+}
+.plan:hover            { border-color: var(--pro); background: rgba(240,180,41,0.03); }
+.plan.is-hot           { border-color: rgba(240,180,41,0.35); background: rgba(240,180,41,0.03); }
+.plan-badge {
+  position: absolute; top: -1px; right: -1px;
+  background: var(--pro); color: var(--bg);
+  font-family: 'Space Mono', monospace; font-size: 0.48rem; font-weight: 700;
+  padding: 0.1rem 0.4rem; border-radius: 0 4px 0 2px; letter-spacing: 0.06em;
+}
+.plan-name  { font-weight: 800; font-size: 0.9rem; margin-bottom: 0.1rem; }
+.plan-price { font-family: 'Space Mono', monospace; font-size: 1rem; color: var(--pro); margin-bottom: 0.3rem; }
+.plan-price sub { font-size: 0.55rem; color: var(--muted); vertical-align: baseline; }
+.plan-desc  { font-family: 'Space Mono', monospace; font-size: 0.58rem; color: var(--muted); line-height: 1.5; }
+.plan-cta   { margin-top: 0.55rem; font-family: 'Space Mono', monospace; font-size: 0.58rem; color: var(--muted); transition: color 0.15s; }
+.plan:hover .plan-cta { color: var(--pro); }
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  header { padding: 1rem 1.2rem; }
+  .wrap  { padding: 2rem 1rem 3rem; }
+  .file-row { grid-template-columns: auto 1fr auto auto; }
+  .file-size { display: none; }
+  .plans { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Mor<span>phix</span></div>
+  <button class="pro-btn" id="proBtn">★ Go Pro</button>
+</header>
+
+<div class="wrap">
+  <h1>Convert <em>anything.</em></h1>
+  <p class="sub">// video · audio · images · docs · units — 100% in your browser, nothing uploaded</p>
+
+  <div class="pro-bar" id="proBar">★ Pro is active — you're all set</div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab is-active" data-panel="video">🎬 Video</div>
+    <div class="tab" data-panel="audio">🎵 Audio</div>
+    <div class="tab" data-panel="image">🖼️ Image</div>
+    <div class="tab" data-panel="doc">📄 Documents</div>
+    <div class="tab-divider"></div>
+    <div class="tab" data-panel="unit">📐 Units</div>
+  </div>
+
+  <!-- Video -->
+  <div class="panel is-visible" id="panel-video">
+    <div class="dropzone" id="dz-video">
+      <span class="dz-icon">🎬</span>
+      <div class="dz-title">Drop your video here</div>
+      <div class="dz-hint">MP4 · WebM · AVI · MOV · MKV · GIF</div>
+      <div class="dz-sub">or click to browse</div>
+      <input type="file" id="fi-video" hidden multiple accept="video/*,.avi,.mkv,.mov">
+    </div>
+    <div id="list-video"></div>
+    <div class="actions" id="act-video">
+      <button class="btn btn-go" id="go-video">Convert</button>
+      <button class="btn btn-clr" id="clr-video">Clear</button>
+    </div>
+    <div class="progress" id="prog-video">
+      <div class="progress-top">
+        <span id="prog-video-lbl">Processing...</span>
+        <span id="prog-video-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="prog-video-fill"></div></div>
+    </div>
+    <div class="results" id="res-video">
+      <div class="list-label">done</div>
+      <div id="reslist-video"></div>
+    </div>
+  </div>
+
+  <!-- Audio -->
+  <div class="panel" id="panel-audio">
+    <div class="dropzone" id="dz-audio">
+      <span class="dz-icon">🎵</span>
+      <div class="dz-title">Drop your audio here</div>
+      <div class="dz-hint">MP3 · WAV · OGG · AAC · FLAC · M4A · Opus</div>
+      <div class="dz-sub">or click to browse</div>
+      <input type="file" id="fi-audio" hidden multiple accept="audio/*,.flac,.opus,.m4a">
+    </div>
+    <div id="list-audio"></div>
+    <div class="actions" id="act-audio">
+      <button class="btn btn-go" id="go-audio">Convert</button>
+      <button class="btn btn-clr" id="clr-audio">Clear</button>
+    </div>
+    <div class="progress" id="prog-audio">
+      <div class="progress-top">
+        <span id="prog-audio-lbl">Processing...</span>
+        <span id="prog-audio-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="prog-audio-fill"></div></div>
+    </div>
+    <div class="results" id="res-audio">
+      <div class="list-label">done</div>
+      <div id="reslist-audio"></div>
+    </div>
+  </div>
+
+  <!-- Image -->
+  <div class="panel" id="panel-image">
+    <div class="dropzone" id="dz-image">
+      <span class="dz-icon">🖼️</span>
+      <div class="dz-title">Drop your images here</div>
+      <div class="dz-hint">JPG · PNG · WebP · GIF · BMP → JPEG · PNG · WebP · PDF</div>
+      <div class="dz-sub">or click to browse</div>
+      <input type="file" id="fi-image" hidden multiple accept="image/*">
+    </div>
+    <div id="list-image"></div>
+    <div class="actions" id="act-image">
+      <button class="btn btn-go" id="go-image">Convert</button>
+      <button class="btn btn-clr" id="clr-image">Clear</button>
+    </div>
+    <div class="progress" id="prog-image">
+      <div class="progress-top">
+        <span id="prog-image-lbl">Processing...</span>
+        <span id="prog-image-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="prog-image-fill"></div></div>
+    </div>
+    <div class="results" id="res-image">
+      <div class="list-label">done</div>
+      <div id="reslist-image"></div>
+    </div>
+  </div>
+
+  <!-- Documents -->
+  <div class="panel" id="panel-doc">
+    <div class="dropzone" id="dz-doc">
+      <span class="dz-icon">📄</span>
+      <div class="dz-title">Drop your documents here</div>
+      <div class="dz-hint">TXT · MD · HTML · HTM · RTF</div>
+      <div class="dz-sub">or click to browse</div>
+      <input type="file" id="fi-doc" hidden multiple accept=".txt,.md,.html,.htm,.rtf">
+    </div>
+    <div id="list-doc"></div>
+    <div class="actions" id="act-doc">
+      <button class="btn btn-go" id="go-doc">Convert</button>
+      <button class="btn btn-clr" id="clr-doc">Clear</button>
+    </div>
+    <div class="progress" id="prog-doc">
+      <div class="progress-top">
+        <span id="prog-doc-lbl">Processing...</span>
+        <span id="prog-doc-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="prog-doc-fill"></div></div>
+    </div>
+    <div class="results" id="res-doc">
+      <div class="list-label">done</div>
+      <div id="reslist-doc"></div>
+    </div>
+  </div>
+
+  <!-- Units -->
+  <div class="panel" id="panel-unit">
+    <div class="unit-grid" id="unitGrid"></div>
+  </div>
+
+  <div class="foot">
+    <span>Privacy:</span> everything runs locally in your browser. your files never leave your device.
+  </div>
+</div>
+
+<!-- Pro Modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Morphix <em>Pro</em></div>
+        <div class="modal-tag">// higher quality · larger files · no limits</div>
+      </div>
+      <button class="modal-close" id="modalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <ul class="feats">
+        <li><span class="feat-icon">⚡</span><span class="feat-label">Conversion speed</span><span class="tag-free">fast</span></li>
+        <li><span class="feat-icon">💎</span><span class="feat-label">Output quality</span><span class="tag-pro">★ highest</span></li>
+        <li><span class="feat-icon">🎞️</span><span class="feat-label">Audio bitrate</span><span class="tag-pro">★ up to 320 kbps</span></li>
+        <li><span class="feat-icon">🗜️</span><span class="feat-label">Max file size</span><span class="tag-pro">★ up to 2 GB</span></li>
+        <li><span class="feat-icon">📦</span><span class="feat-label">Batch processing</span><span class="tag-pro">★ unlimited</span></li>
+      </ul>
+      <div class="plans">
+        <div class="plan" id="plan-monthly">
+          <div class="plan-name">Monthly</div>
+          <div class="plan-price">$4.99<sub>/mo</sub></div>
+          <div class="plan-desc">Billed monthly<br>Cancel anytime</div>
+          <div class="plan-cta">Get started →</div>
+        </div>
+        <div class="plan is-hot" id="plan-yearly">
+          <div class="plan-badge">BEST VALUE</div>
+          <div class="plan-name">Yearly</div>
+          <div class="plan-price">$29<sub>/yr</sub></div>
+          <div class="plan-desc">Save 2 months<br>Billed once a year</div>
+          <div class="plan-cta">Get started →</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">🔒 Payments secured by Stripe · we never store your card details</div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIG — paste your Stripe Payment Links here
+// ─────────────────────────────────────────────────────────────────────────────
+const STRIPE = {
+  monthly: 'https://buy.stripe.com/test_dRm6oGcxu3CC3qi2DT24000',
+  yearly:  'https://buy.stripe.com/test_eVq4gy2WUb54bWOfqF24001',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FILE SIZE LIMITS
+// ─────────────────────────────────────────────────────────────────────────────
+const LIMIT_FREE = 500 * 1024 * 1024;   // 500 MB
+const LIMIT_PRO  = 2   * 1024 * 1024 * 1024; // 2 GB
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPPORTED FORMATS
+// ─────────────────────────────────────────────────────────────────────────────
+const FORMATS = {
+  video: ['mp4', 'webm', 'avi', 'mov', 'mkv', 'gif'],
+  audio: ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a', 'opus'],
+  image: ['jpeg', 'png', 'webp', 'pdf'],
+  doc: {
+    txt:  ['html', 'pdf'],
+    md:   ['html', 'pdf'],
+    html: ['txt',  'pdf'],
+    htm:  ['txt',  'pdf'],
+    rtf:  ['txt'],
+  },
+};
+
+const MIME_TYPES = {
+  mp4:  'video/mp4',
+  webm: 'video/webm',
+  avi:  'video/x-msvideo',
+  mov:  'video/quicktime',
+  mkv:  'video/x-matroska',
+  gif:  'image/gif',
+  mp3:  'audio/mpeg',
+  wav:  'audio/wav',
+  ogg:  'audio/ogg',
+  aac:  'audio/aac',
+  flac: 'audio/flac',
+  m4a:  'audio/mp4',
+  opus: 'audio/opus',
+  jpeg: 'image/jpeg',
+  png:  'image/png',
+  webp: 'image/webp',
+  pdf:  'application/pdf',
+  txt:  'text/plain',
+  html: 'text/html',
+};
+
+// Audio codecs that are lossless — don't apply bitrate
+const LOSSLESS_AUDIO = new Set(['wav', 'flac']);
+
+// Explicit FFmpeg encoder names per output format
+const AUDIO_ENCODERS = {
+  mp3:  'libmp3lame',
+  ogg:  'libvorbis',
+  opus: 'libopus',
+  aac:  'aac',
+  flac: 'flac',
+  wav:  'pcm_s16le',
+  m4a:  'aac',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRO STATUS
+// ─────────────────────────────────────────────────────────────────────────────
+let isPro = localStorage.getItem('morphix_pro') === '1';
+
+function activatePro() {
+  isPro = true;
+  localStorage.setItem('morphix_pro', '1');
+  const btn = document.getElementById('proBtn');
+  btn.textContent = '★ Pro — active';
+  btn.classList.add('is-active');
+  document.getElementById('proBar').classList.add('is-visible');
+  // Refresh all file lists so size warnings update
+  for (const cat of CATEGORIES) renderList(cat);
+}
+
+// Activate from Stripe redirect (?pro=ok)
+if (new URLSearchParams(location.search).get('pro') === 'ok') {
+  activatePro();
+  history.replaceState({}, '', location.pathname);
+} else if (isPro) {
+  activatePro();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+const overlay = document.getElementById('overlay');
+
+function openModal() {
+  if (isPro) return;
+  overlay.classList.add('is-open');
+}
+
+function closeModal() {
+  overlay.classList.remove('is-open');
+}
+
+overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+document.getElementById('modalClose').addEventListener('click', closeModal);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+document.getElementById('proBtn').addEventListener('click', openModal);
+
+document.getElementById('plan-monthly').addEventListener('click', () => pay('monthly'));
+document.getElementById('plan-yearly').addEventListener('click',  () => pay('yearly'));
+
+function pay(plan) {
+  const link = STRIPE[plan];
+  // Dev mode: no link set — activate directly
+  if (!link) { activatePro(); closeModal(); return; }
+  // success_url must be set in Stripe Dashboard → Payment Link → After payment → Redirect to URL:
+  // https://yourdomain.com/path?pro=ok
+  window.location.href = link;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('is-active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('is-visible'));
+  tab.classList.add('is-active');
+  document.getElementById('panel-' + tab.dataset.panel).classList.add('is-visible');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FILE QUEUE
+// ─────────────────────────────────────────────────────────────────────────────
+const CATEGORIES = ['video', 'audio', 'image', 'doc'];
+const queue = { video: [], audio: [], image: [], doc: [] };
+
+function getOutputFormats(file, cat) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (cat === 'doc') return FORMATS.doc[ext] || ['txt'];
+  // Filter out same format (normalise jpg → jpeg for comparison)
+  const inputExt = ext === 'jpg' ? 'jpeg' : ext;
+  return FORMATS[cat].filter(f => f !== inputExt);
+}
+
+function fileSize(bytes) {
+  if (bytes < 1048576)    return (bytes / 1024).toFixed(0) + ' KB';
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  return (bytes / 1073741824).toFixed(2) + ' GB';
+}
+
+function addFiles(cat, files) {
+  for (const file of files) {
+    const fmts = getOutputFormats(file, cat);
+    if (!fmts.length) continue;
+    // Skip duplicates
+    const isDupe = queue[cat].some(x => x.file.name === file.name && x.file.size === file.size);
+    if (!isDupe) queue[cat].push({ file, fmt: fmts[0] });
+  }
+  renderList(cat);
+}
+
+function renderList(cat) {
+  const listEl   = document.getElementById('list-' + cat);
+  const actionsEl = document.getElementById('act-' + cat);
+  const goBtn    = document.getElementById('go-' + cat);
+
+  listEl.innerHTML = '';
+
+  if (queue[cat].length === 0) {
+    actionsEl.classList.remove('is-visible');
+    return;
+  }
+
+  actionsEl.classList.add('is-visible');
+
+  const label = document.createElement('div');
+  label.className = 'list-label';
+  label.textContent = 'files';
+  listEl.appendChild(label);
+
+  const limit = isPro ? LIMIT_PRO : LIMIT_FREE;
+
+  queue[cat].forEach((item, i) => {
+    const fmts    = getOutputFormats(item.file, cat);
+    const tooBig  = item.file.size > limit;
+    const ext     = item.file.name.split('.').pop().toLowerCase();
+
+    // Row
+    const row = document.createElement('div');
+    row.className = 'file-row' + (tooBig ? ' is-toolarge' : '');
+
+    // Badge
+    const badge = document.createElement('span');
+    badge.className = 'badge badge-' + cat;
+    badge.textContent = ext;
+    row.appendChild(badge);
+
+    // File info
+    const info = document.createElement('div');
+    info.className = 'file-info';
+
+    const name = document.createElement('div');
+    name.className = 'file-name';
+    name.textContent = item.file.name;
+    info.appendChild(name);
+
+    const size = document.createElement('div');
+    size.className = 'file-size';
+    size.textContent = fileSize(item.file.size);
+
+    if (tooBig) {
+      const warn = document.createElement('span');
+      warn.className = 'file-size-warn';
+      warn.textContent = ' · exceeds ' + (isPro ? '2 GB' : '500 MB') + ' limit';
+      size.appendChild(warn);
+
+      if (!isPro) {
+        const goPro = document.createElement('span');
+        goPro.className = 'file-size-gopro';
+        goPro.textContent = ' — Go Pro';
+        goPro.addEventListener('click', e => { e.stopPropagation(); openModal(); });
+        size.appendChild(goPro);
+      }
+    }
+
+    info.appendChild(size);
+    row.appendChild(info);
+
+    // Format select
+    const select = document.createElement('select');
+    select.className = 'fmt-select';
+    for (const fmt of fmts) {
+      const opt = document.createElement('option');
+      opt.value = fmt;
+      opt.textContent = fmt.toUpperCase();
+      if (fmt === item.fmt) opt.selected = true;
+      select.appendChild(opt);
+    }
+    select.addEventListener('change', () => { queue[cat][i].fmt = select.value; });
+    row.appendChild(select);
+
+    // Delete button
+    const del = document.createElement('button');
+    del.className = 'del-btn';
+    del.textContent = '✕';
+    del.setAttribute('aria-label', 'Remove file');
+    del.addEventListener('click', () => {
+      queue[cat].splice(i, 1);
+      renderList(cat);
+    });
+    row.appendChild(del);
+
+    listEl.appendChild(row);
+  });
+
+  // Update convert button label
+  const n = queue[cat].length;
+  goBtn.textContent = n === 1 ? 'Convert 1 file' : 'Convert ' + n + ' files';
+}
+
+function clearCat(cat) {
+  queue[cat] = [];
+  renderList(cat);
+  document.getElementById('res-'  + cat).classList.remove('is-visible');
+  const prog = document.getElementById('prog-' + cat);
+  prog.classList.remove('is-visible');
+  document.getElementById('prog-' + cat + '-fill').style.width = '0%';
+  document.getElementById('prog-' + cat + '-pct').textContent  = '0%';
+  document.getElementById('prog-' + cat + '-lbl').textContent  = 'Processing...';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DRAG & DROP + CLICK TO BROWSE
+// ─────────────────────────────────────────────────────────────────────────────
+for (const cat of CATEGORIES) {
+  const dz = document.getElementById('dz-' + cat);
+  const fi = document.getElementById('fi-' + cat);
+
+  dz.addEventListener('click',     () => fi.click());
+  dz.addEventListener('dragover',  e  => { e.preventDefault(); dz.classList.add('is-over'); });
+  dz.addEventListener('dragleave', ()  => dz.classList.remove('is-over'));
+  dz.addEventListener('drop',      e  => {
+    e.preventDefault();
+    dz.classList.remove('is-over');
+    addFiles(cat, [...e.dataTransfer.files]);
+  });
+  fi.addEventListener('change', () => {
+    addFiles(cat, [...fi.files]);
+    fi.value = '';
+  });
+
+  document.getElementById('go-'  + cat).addEventListener('click', () => convert(cat));
+  document.getElementById('clr-' + cat).addEventListener('click', () => clearCat(cat));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FFMPEG (video & audio)
+// ─────────────────────────────────────────────────────────────────────────────
+let ffInstance = null;
+let ffFetch    = null;
+
+async function loadFFmpeg() {
+  if (ffInstance) return;
+
+  if (typeof SharedArrayBuffer === 'undefined') {
+    throw new Error('Video/audio conversion requires a browser with SharedArrayBuffer support (Chrome or Firefox over HTTPS).');
+  }
+
+  const { createFFmpeg, fetchFile } = FFmpeg;
+  const instance = createFFmpeg({ log: false });
+
+  try {
+    await instance.load();
+  } catch (err) {
+    throw new Error('Failed to load conversion engine. Please refresh and try again.');
+  }
+
+  ffInstance = instance;
+  ffFetch    = fetchFile;
+}
+
+function buildVideoArgs(inExt, outFmt) {
+  if (outFmt === 'gif') {
+    // Scale to 480px wide, ensure even height (-2), 12fps
+    return ['-i', 'in.' + inExt, '-vf', 'fps=12,scale=480:-2:flags=lanczos', '-loop', '0', 'out.' + outFmt];
+  }
+  if (outFmt === 'webm') {
+    const crf = isPro ? '20' : '30';
+    return ['-i', 'in.' + inExt, '-vcodec', 'libvpx-vp9', '-crf', crf, '-b:v', '0', '-acodec', 'libvorbis', 'out.' + outFmt];
+  }
+  if (outFmt === 'avi') {
+    return ['-i', 'in.' + inExt, '-q:v', isPro ? '2' : '5', 'out.' + outFmt];
+  }
+  // mp4 / mov / mkv — H.264 + AAC
+  const quality = isPro
+    ? ['-vcodec', 'libx264', '-preset', 'slow',  '-crf', '17', '-acodec', 'aac']
+    : ['-vcodec', 'libx264', '-preset', 'fast',  '-crf', '23', '-acodec', 'aac'];
+  return ['-i', 'in.' + inExt, ...quality, 'out.' + outFmt];
+}
+
+function buildAudioArgs(inExt, outFmt) {
+  const encoder = AUDIO_ENCODERS[outFmt];
+  const base = ['-i', 'in.' + inExt];
+
+  if (LOSSLESS_AUDIO.has(outFmt)) {
+    // Lossless — no bitrate flag
+    return encoder
+      ? [...base, '-c:a', encoder, 'out.' + outFmt]
+      : [...base, 'out.' + outFmt];
+  }
+
+  const bitrate = isPro ? '320k' : '192k';
+  return encoder
+    ? [...base, '-c:a', encoder, '-b:a', bitrate, 'out.' + outFmt]
+    : [...base, '-b:a', bitrate, 'out.' + outFmt];
+}
+
+async function convertAV(file, fmt, cat) {
+  await loadFFmpeg();
+
+  const inExt = file.name.split('.').pop().toLowerCase();
+  const inName  = 'in.'  + inExt;
+  const outName = 'out.' + fmt;
+
+  ffInstance.FS('writeFile', inName, await ffFetch(file));
+
+  const args = cat === 'video'
+    ? buildVideoArgs(inExt, fmt)
+    : buildAudioArgs(inExt, fmt);
+
+  try {
+    await ffInstance.run(...args);
+  } catch (err) {
+    ffInstance = null; // reset so next call reloads fresh
+    throw new Error('Conversion failed. The file may be corrupt or the format unsupported.');
+  }
+
+  const data = ffInstance.FS('readFile', outName);
+
+  // Clean up FFmpeg virtual FS
+  try { ffInstance.FS('unlink', inName);  } catch (_) {}
+  try { ffInstance.FS('unlink', outName); } catch (_) {}
+
+  return new Blob([data.buffer], { type: MIME_TYPES[fmt] || 'application/octet-stream' });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMAGE CONVERSION (Canvas)
+// ─────────────────────────────────────────────────────────────────────────────
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload  = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not open image file.')); };
+    img.src = url;
+  });
+}
+
+async function convertImage(file, fmt) {
+  const img = await loadImage(file);
+
+  if (img.width * img.height > 32_000_000) {
+    throw new Error('Image too large (' + img.width + 'x' + img.height + '). Maximum ~32 megapixels.');
+  }
+
+  if (fmt === 'pdf') {
+    return imageToPdf(img);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d');
+
+  // Fill white background for JPEG (no alpha channel)
+  if (fmt === 'jpeg') {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  ctx.drawImage(img, 0, 0);
+
+  return new Promise((resolve, reject) => {
+    const quality = isPro ? 0.97 : 0.88;
+    canvas.toBlob(
+      blob => blob ? resolve(blob) : reject(new Error('Canvas conversion failed.')),
+      MIME_TYPES[fmt] || 'image/png',
+      quality
+    );
+  });
+}
+
+function imageToPdf(img) {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement('canvas');
+    canvas.width  = img.width;
+    canvas.height = img.height;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+
+    canvas.toBlob(blob => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const b64   = reader.result.split(',')[1];
+          const bytes = buildImagePdf(b64, img.width, img.height);
+          resolve(new Blob([bytes], { type: 'application/pdf' }));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(new Error('PDF generation failed.'));
+      reader.readAsDataURL(blob);
+    }, 'image/jpeg', 0.92);
+  });
+}
+
+function buildImagePdf(jpegB64, w, h) {
+  // Points at 72dpi (1px = 0.75pt)
+  const pw = Math.round(w * 0.75);
+  const ph = Math.round(h * 0.75);
+  const imgBytes = atob(jpegB64);
+  const imgLen   = imgBytes.length;
+  const stream   = 'q ' + pw + ' 0 0 ' + ph + ' 0 0 cm /I1 Do Q';
+
+  // Build objects as strings first, then measure byte offsets for xref
+  const obj1 = '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n';
+  const obj2 = '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n';
+  const obj3 = '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ' + pw + ' ' + ph + ']/Contents 4 0 R/Resources<</XObject<</I1 5 0 R>>>>>>endobj\n';
+  const obj4 = '4 0 obj<</Length ' + stream.length + '>>stream\n' + stream + '\nendstream endobj\n';
+  const obj5hdr = '5 0 obj<</Type/XObject/Subtype/Image/Width ' + w + '/Height ' + h + '/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length ' + imgLen + '>>stream\n';
+  const obj5tail = '\nendstream endobj\n';
+  const header = '%PDF-1.4\n';
+
+  // Calculate xref offsets
+  const off1 = header.length;
+  const off2 = off1 + obj1.length;
+  const off3 = off2 + obj2.length;
+  const off4 = off3 + obj3.length;
+  const off5 = off4 + obj4.length;
+
+  const pad = n => String(n).padStart(10, '0');
+  const xref =
+    'xref\n0 6\n' +
+    '0000000000 65535 f \n' +
+    pad(off1) + ' 00000 n \n' +
+    pad(off2) + ' 00000 n \n' +
+    pad(off3) + ' 00000 n \n' +
+    pad(off4) + ' 00000 n \n' +
+    pad(off5) + ' 00000 n \n';
+  const trailer = 'trailer<</Size 6/Root 1 0 R>>\nstartxref\n' + (off5 + obj5hdr.length + imgLen + obj5tail.length) + '\n%%EOF';
+
+  // Assemble binary
+  const parts = [header, obj1, obj2, obj3, obj4, obj5hdr];
+  const textBytes = parts.join('');
+  const out = new Uint8Array(textBytes.length + imgLen + obj5tail.length + xref.length + trailer.length);
+  let pos = 0;
+
+  for (let i = 0; i < textBytes.length; i++) out[pos++] = textBytes.charCodeAt(i);
+  for (let i = 0; i < imgLen;       i++) out[pos++] = imgBytes.charCodeAt(i);
+  for (let i = 0; i < obj5tail.length; i++) out[pos++] = obj5tail.charCodeAt(i);
+  for (let i = 0; i < xref.length;  i++) out[pos++] = xref.charCodeAt(i);
+  for (let i = 0; i < trailer.length; i++) out[pos++] = trailer.charCodeAt(i);
+
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCUMENT CONVERSION
+// ─────────────────────────────────────────────────────────────────────────────
+async function convertDoc(file, fmt) {
+  const ext  = file.name.split('.').pop().toLowerCase();
+  const text = await file.text();
+
+  if (fmt === 'txt') {
+    return new Blob([docToPlainText(text, ext)], { type: 'text/plain' });
+  }
+
+  if (fmt === 'html') {
+    return new Blob([docToHtml(text, ext)], { type: 'text/html' });
+  }
+
+  if (fmt === 'pdf') {
+    const plain = docToPlainText(text, ext);
+    return new Blob([buildTextPdf(plain)], { type: 'application/pdf' });
+  }
+
+  throw new Error('Unsupported output format: ' + fmt);
+}
+
+function docToPlainText(text, ext) {
+  if (ext === 'rtf') {
+    return text
+      .replace(/\{[^{}]*\}/g, '')          // remove groups like {\fonttbl...}
+      .replace(/\\[a-zA-Z]+-?\d*\s?/g, '') // remove control words like \rtf1
+      .replace(/[\\{}]/g, '')              // remove stray backslashes/braces
+      .replace(/\r?\n{2,}/g, '\n\n')
+      .trim();
+  }
+  // html/htm
+  return text
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\r?\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function docToHtml(text, ext) {
+  if (ext === 'html' || ext === 'htm') return text;
+
+  // Markdown / TXT → HTML
+  let body = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,    '<em>$1</em>')
+    .replace(/`(.+?)`/g,      '<code>$1</code>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
+    '<style>body{font-family:sans-serif;max-width:800px;margin:2rem auto;line-height:1.7}' +
+    'h1,h2,h3{margin-top:1.5rem}code{background:#f0f0f0;padding:.1em .3em;border-radius:3px}</style>' +
+    '</head><body><p>' + body + '</p></body></html>';
+}
+
+function buildTextPdf(text) {
+  const MAX_LINES = 500;
+  const LINE_W    = 95;   // max chars per line
+  const LINE_H    = 14;   // pt between lines
+  const PAGE_H    = 842;  // A4 height in pt
+  const MARGIN_X  = 40;
+  const MARGIN_Y  = 800;
+  const LINES_PER_PAGE = Math.floor((PAGE_H - 80) / LINE_H);
+
+  // Word-wrap and cap
+  const rawLines = text.split('\n').slice(0, MAX_LINES);
+  const lines = [];
+  for (const raw of rawLines) {
+    if (raw.length <= LINE_W) {
+      lines.push(raw);
+    } else {
+      // Simple wrap
+      for (let i = 0; i < raw.length; i += LINE_W) {
+        lines.push(raw.slice(i, i + LINE_W));
+      }
+    }
+  }
+
+  // Escape PDF string special chars
+  const esc = s => s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+
+  let stream = 'BT /F1 11 Tf ' + MARGIN_X + ' ' + MARGIN_Y + ' Td ' + LINE_H + ' TL\n';
+  for (const line of lines.slice(0, LINES_PER_PAGE)) {
+    stream += '(' + esc(line) + ') Tj T*\n';
+  }
+  stream += 'ET';
+
+  const obj1 = '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n';
+  const obj2 = '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n';
+  const obj3 = '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Contents 4 0 R/Resources<</Font<</F1<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>>>>>endobj\n';
+  const obj4 = '4 0 obj<</Length ' + stream.length + '>>stream\n' + stream + '\nendstream endobj\n';
+  const header = '%PDF-1.4\n';
+
+  const off1 = header.length;
+  const off2 = off1 + obj1.length;
+  const off3 = off2 + obj2.length;
+  const off4 = off3 + obj3.length;
+  const xrefPos = off4 + obj4.length;
+
+  const pad = n => String(n).padStart(10, '0');
+  const xref =
+    'xref\n0 5\n' +
+    '0000000000 65535 f \n' +
+    pad(off1) + ' 00000 n \n' +
+    pad(off2) + ' 00000 n \n' +
+    pad(off3) + ' 00000 n \n' +
+    pad(off4) + ' 00000 n \n';
+
+  return header + obj1 + obj2 + obj3 + obj4 +
+    xref + 'trailer<</Size 5/Root 1 0 R>>\nstartxref\n' + xrefPos + '\n%%EOF';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONVERT — main entry point
+// ─────────────────────────────────────────────────────────────────────────────
+async function convert(cat) {
+  const items = queue[cat];
+  if (!items.length) return;
+
+  const goBtn  = document.getElementById('go-'  + cat);
+  const fillEl = document.getElementById('prog-' + cat + '-fill');
+  const lblEl  = document.getElementById('prog-' + cat + '-lbl');
+  const pctEl  = document.getElementById('prog-' + cat + '-pct');
+  const progEl = document.getElementById('prog-' + cat);
+  const resEl  = document.getElementById('res-'  + cat);
+  const listEl = document.getElementById('reslist-' + cat);
+
+  goBtn.disabled = true;
+  listEl.innerHTML = '';
+  resEl.classList.remove('is-visible');
+  progEl.classList.add('is-visible');
+  fillEl.style.width = '0%';
+
+  const limit = isPro ? LIMIT_PRO : LIMIT_FREE;
+  const results = [];
+
+  try {
+    // Pre-load FFmpeg before loop so indicator shows
+    if ((cat === 'video' || cat === 'audio') && !ffInstance) {
+      lblEl.textContent = 'Loading engine...';
+      pctEl.textContent = '';
+      await loadFFmpeg();
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      const { file, fmt } = items[i];
+      const pct = Math.max(5, Math.round((i / items.length) * 100));
+      fillEl.style.width  = pct + '%';
+      pctEl.textContent   = pct + '%';
+      lblEl.textContent   = file.name + ' → .' + fmt;
+
+      if (file.size > limit) {
+        results.push({ ok: false, name: file.name, error: 'File too large (limit ' + (isPro ? '2 GB' : '500 MB') + ')' });
+        continue;
+      }
+
+      try {
+        let blob;
+        if      (cat === 'image') blob = await convertImage(file, fmt);
+        else if (cat === 'doc')   blob = await convertDoc(file, fmt);
+        else                      blob = await convertAV(file, fmt, cat);
+
+        const outName = file.name.replace(/\.[^.]+$/, '') + '.' + fmt;
+        results.push({ ok: true, name: outName, blob });
+      } catch (err) {
+        results.push({ ok: false, name: file.name, error: err.message });
+      }
+    }
+  } catch (outerErr) {
+    // e.g. FFmpeg failed to load
+    results.push({ ok: false, name: 'Error', error: outerErr.message });
+  } finally {
+    goBtn.disabled = false;
+  }
+
+  fillEl.style.width = '100%';
+  pctEl.textContent  = '100%';
+  lblEl.textContent  = 'Done!';
+
+  renderResults(cat, results);
+
+  resEl.classList.add('is-visible');
+  setTimeout(() => progEl.classList.remove('is-visible'), 1800);
+}
+
+function renderResults(cat, results) {
+  const listEl    = document.getElementById('reslist-' + cat);
+  const successful = results.filter(r => r.ok);
+
+  // Download All button
+  if (successful.length > 1) {
+    const row = document.createElement('div');
+    row.className = 'dl-all-row';
+
+    const btn = document.createElement('button');
+    btn.className   = 'dl-btn';
+    btn.textContent = '↓ Download all (' + successful.length + ')';
+    btn.style.padding = '0.35rem 0.9rem';
+
+    btn.addEventListener('click', () => {
+      for (const { name, blob } of successful) {
+        downloadBlob(blob, name);
+      }
+    });
+
+    row.appendChild(btn);
+    listEl.appendChild(row);
+  }
+
+  for (const result of results) {
+    const row = document.createElement('div');
+
+    if (result.ok) {
+      row.className = 'res-row res-row-ok';
+
+      const nameEl = document.createElement('span');
+      nameEl.className   = 'res-name-ok';
+      nameEl.textContent = result.name;
+      row.appendChild(nameEl);
+
+      const dlBtn = document.createElement('button');
+      dlBtn.className   = 'dl-btn';
+      dlBtn.textContent = '↓ Download';
+      dlBtn.addEventListener('click', () => downloadBlob(result.blob, result.name));
+      row.appendChild(dlBtn);
+    } else {
+      row.className = 'res-row res-row-error';
+
+      const nameEl = document.createElement('span');
+      nameEl.className   = 'res-name-error';
+      nameEl.textContent = result.name;
+      row.appendChild(nameEl);
+
+      const errEl = document.createElement('span');
+      errEl.className   = 'res-error-msg';
+      errEl.textContent = result.error;
+      row.appendChild(errEl);
+    }
+
+    listEl.appendChild(row);
+  }
+}
+
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href     = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNIT CONVERTER
+// ─────────────────────────────────────────────────────────────────────────────
+const UNIT_GROUPS = [
+  { title: '⚖️ Weight', pairs: [
+    { from: 'kg',   to: 'lb',    k: 2.20462   },
+    { from: 'lb',   to: 'kg',    k: 0.453592  },
+    { from: 'g',    to: 'oz',    k: 0.035274  },
+  ]},
+  { title: '📏 Length', pairs: [
+    { from: 'm',    to: 'ft',    k: 3.28084   },
+    { from: 'ft',   to: 'm',     k: 0.3048    },
+    { from: 'km',   to: 'mi',    k: 0.621371  },
+    { from: 'cm',   to: 'in',    k: 0.393701  },
+  ]},
+  { title: '🌡️ Temperature', pairs: [
+    { from: '°C',   to: '°F',    toB: c => c * 9/5 + 32,       fromB: f => (f - 32) * 5/9 },
+    { from: '°F',   to: '°C',    toB: f => (f - 32) * 5/9,     fromB: c => c * 9/5 + 32   },
+    { from: '°C',   to: 'K',     toB: c => c + 273.15,          fromB: k => k - 273.15     },
+  ]},
+  { title: '💾 Data', pairs: [
+    { from: 'TB',   to: 'GB',    k: 1024      },
+    { from: 'GB',   to: 'MB',    k: 1024      },
+    { from: 'MB',   to: 'KB',    k: 1024      },
+  ]},
+  { title: '🚀 Speed', pairs: [
+    { from: 'km/h', to: 'm/s',   k: 0.277778  },
+    { from: 'mph',  to: 'km/h',  k: 1.60934   },
+    { from: 'knot', to: 'km/h',  k: 1.852     },
+  ]},
+  { title: '📐 Area', pairs: [
+    { from: 'ha',   to: 'acre',  k: 2.47105   },
+    { from: 'm²',   to: 'ft²',   k: 10.7639   },
+    { from: 'km²',  to: 'mi²',   k: 0.386102  },
+  ]},
+];
+
+function roundSmart(n) {
+  return Math.round(n * 1e8) / 1e8;
+}
+
+(function buildUnitConverter() {
+  const grid = document.getElementById('unitGrid');
+
+  UNIT_GROUPS.forEach((group, gi) => {
+    const card = document.createElement('div');
+    card.className = 'unit-card';
+
+    const title = document.createElement('div');
+    title.className   = 'unit-title';
+    title.textContent = group.title;
+    card.appendChild(title);
+
+    group.pairs.forEach((pair, pi) => {
+      const row = document.createElement('div');
+      row.className = 'unit-row';
+
+      const inputA = document.createElement('input');
+      inputA.type        = 'number';
+      inputA.className   = 'unit-input';
+      inputA.placeholder = '0';
+
+      const lblA = document.createElement('span');
+      lblA.className   = 'unit-lbl';
+      lblA.textContent = pair.from;
+
+      const arrow = document.createElement('span');
+      arrow.className   = 'unit-arr';
+      arrow.textContent = '→';
+
+      const inputB = document.createElement('input');
+      inputB.type        = 'number';
+      inputB.className   = 'unit-input';
+      inputB.placeholder = '0';
+
+      const lblB = document.createElement('span');
+      lblB.className   = 'unit-lbl';
+      lblB.textContent = pair.to;
+
+      inputA.addEventListener('input', () => {
+        const v = parseFloat(inputA.value);
+        inputB.value = isNaN(v) ? '' : roundSmart(pair.toB ? pair.toB(v) : v * pair.k);
+      });
+      inputB.addEventListener('input', () => {
+        const v = parseFloat(inputB.value);
+        inputA.value = isNaN(v) ? '' : roundSmart(pair.fromB ? pair.fromB(v) : v / pair.k);
+      });
+
+      row.append(inputA, lblA, arrow, inputB, lblB);
+      card.appendChild(row);
+    });
+
+    grid.appendChild(card);
+  });
+})();
+</script>
+</body>
+</html>
